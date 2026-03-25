@@ -1,0 +1,30 @@
+name: Deploy to Hostinger VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.HOSTINGER_VPS_HOST }}
+          username: ${{ secrets.HOSTINGER_VPS_USER }}
+          key: ${{ secrets.HOSTINGER_VPS_SSH_KEY }}
+          port: ${{ secrets.HOSTINGER_VPS_PORT }}
+
+          script: |
+            cd /root/unified-portal
+            git pull origin main
+            docker-compose pull
+            docker-compose up -d
+            echo "✓ Deployment successful!"
+            docker-compose ps
+            docker-compose logs --tail=20
