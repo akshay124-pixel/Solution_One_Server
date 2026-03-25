@@ -1,38 +1,22 @@
-version: '3.8'
-
 services:
   backend:
     build: .
     container_name: unified-portal-backend
     restart: unless-stopped
-    
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      UNIFIED_SERVER_PORT: 5050
-      UNIFIED_CRM_DB_URL: ${UNIFIED_CRM_DB_URL}
-      UNIFIED_SO_DB_URL: ${UNIFIED_SO_DB_URL}
-      UNIFIED_AUTH_DB_URL: ${UNIFIED_AUTH_DB_URL}
-      UNIFIED_CLIENT_URL: ${UNIFIED_CLIENT_URL}
-      UNIFIED_JWT_SECRET: ${UNIFIED_JWT_SECRET}
-      UNIFIED_JWT_EXPIRY: ${UNIFIED_JWT_EXPIRY}
-      UNIFIED_REFRESH_TOKEN_SECRET: ${UNIFIED_REFRESH_TOKEN_SECRET}
-      UNIFIED_REFRESH_TOKEN_EXPIRY: ${UNIFIED_REFRESH_TOKEN_EXPIRY}
-      MAIL_HOST: ${MAIL_HOST}
-      MAIL_PORT: ${MAIL_PORT}
-      MAIL_USER: ${MAIL_USER}
-      MAIL_PASS: ${MAIL_PASS}
-      MAIL_FROM: ${MAIL_FROM}
-    
+
+    env_file:
+      - .env   # 🔥 sabse important fix
+
     ports:
       - "5050:5050"
-    
+
     volumes:
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-    
+
     networks:
       - app-network
-    
+
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5050')"]
       interval: 30s
