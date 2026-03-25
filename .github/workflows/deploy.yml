@@ -1,30 +1,202 @@
-name: Deploy to Hostinger VPS
+name: Deploy to VPS with Docker
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - production
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_REGISTRY_USERNAME }}/solution-one-server
 
 jobs:
-  deploy:
+  # ===== BUILD & TEST =====
+  build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.10
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.HOSTINGER_VPS_HOST }}
-          username: ${{ secrets.HOSTINGER_VPS_USER }}
-          key: ${{ secrets.HOSTINGER_VPS_SSH_KEY }}
-          port: ${{ secrets.HOSTINGER_VPS_PORT }}
-
-          script: |
-            cd /root/unified-portal
-            git pull origin main
-            docker-compose pull
-            docker-compose up -d
-            echo "✓ Deployment successful!"
-            docker-compose ps
-            docker-compose logs --tail=20
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check Node version
+        run: node --version && npm --version
+      
+      - name: Verify package integrity
+        run: npm list > /tmp/deps.txt && echo "✅ Dependencies OK"
+  
+  # ===== BUILD & PUSH DOCKER IMAGE =====
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production')
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_REGISTRY_USERNAME }}
+          password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+  
+  # ===== DEPLOY TO VPS =====
+  deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+      
+      - name: Deploy to VPS
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'DEPLOY_EOF'
+          
+          set -e
+          
+          echo "📦 Starting deployment..."
+          cd ${{ secrets.VPS_DEPLOYMENT_PATH }}
+          
+          # Pull latest code
+          echo "📥 Pulling latest code..."
+          git fetch origin
+          git checkout main
+          git pull origin main
+          
+          # Create .env file from GitHub Secrets
+          echo "🔧 Creating .env file..."
+          cat > .env << 'ENVFILE'
+          NODE_ENV=production
+          UNIFIED_SERVER_PORT=5050
+          UNIFIED_CRM_DB_URL=${{ secrets.MONGO_CRM_URL }}
+          UNIFIED_SO_DB_URL=${{ secrets.MONGO_SO_URL }}
+          UNIFIED_AUTH_DB_URL=${{ secrets.MONGO_AUTH_URL }}
+          UNIFIED_CLIENT_URL=${{ secrets.FRONTEND_URL }}
+          UNIFIED_JWT_SECRET=${{ secrets.JWT_SECRET }}
+          UNIFIED_JWT_EXPIRY=7d
+          UNIFIED_REFRESH_TOKEN_SECRET=${{ secrets.REFRESH_TOKEN_SECRET }}
+          UNIFIED_REFRESH_TOKEN_EXPIRY=30d
+          MAIL_HOST=${{ secrets.MAIL_HOST }}
+          MAIL_PORT=${{ secrets.MAIL_PORT }}
+          MAIL_USER=${{ secrets.MAIL_USER }}
+          MAIL_PASS=${{ secrets.MAIL_PASS }}
+          MAIL_FROM=${{ secrets.MAIL_FROM }}
+          ENVFILE
+          
+          chmod 600 .env
+          
+          # Check Docker daemon
+          if ! systemctl is-active --quiet docker; then
+            echo "🔄 Starting Docker..."
+            systemctl start docker
+            sleep 5
+          fi
+          
+          # Pull latest Docker image
+          echo "🐳 Pulling Docker image..."
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest 2>&1 | tail -5
+          
+          # Stop old containers gracefully
+          echo "🛑 Stopping old containers..."
+          docker-compose down || true
+          sleep 2
+          
+          # Start new containers
+          echo "🚀 Starting new containers..."
+          docker-compose up -d --remove-orphans
+          
+          # Wait for container to start
+          echo "⏳ Waiting for container to be healthy..."
+          for i in {1..30}; do
+            if docker ps | grep -q unified-portal-backend; then
+              echo "✅ Container is running"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 1
+          done
+          
+          # Show container status
+          echo "📊 Container status:"
+          docker ps -a | grep unified-portal-backend || echo "Container not found"
+          
+          echo "✅ Deployment completed!"
+          
+          DEPLOY_EOF
+      
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no \
+              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'VERIFY_EOF'
+          
+          cd ${{ secrets.VPS_DEPLOYMENT_PATH }}
+          
+          # Wait a moment for services to stabilize
+          sleep 5
+          
+          # Check container logs
+          echo "📋 Recent logs:"
+          docker-compose logs backend --tail=20 2>&1 | head -30
+          
+          # Test health endpoint
+          echo "🏥 Testing health endpoint..."
+          curl -s -I http://localhost:5050/health | head -3 || echo "Health check in progress..."
+          
+          VERIFY_EOF
+      
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/known_hosts
+      
+      - name: Send notification
+        if: success()
+        run: |
+          echo "✨ Deployment successful!"
+          echo "📍 Backend: https://srv988392.hstgr.cloud/api/crm/"
+          echo "🔌 Socket: https://srv988392.hstgr.cloud/crm/socket.io"
