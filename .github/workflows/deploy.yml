@@ -17,7 +17,6 @@ jobs:
           host: ${{ secrets.HOST }}
           username: root
           key: ${{ secrets.KEY }}
-          port: ${{ secrets.PORT }}
           script: |
             cd /www/wwwroot/Solution_One_Server
             git pull origin main
