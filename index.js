@@ -9,7 +9,7 @@
  * Two separate MongoDB connections are maintained to prevent
  * model name collisions between CRM and SO databases.
  */
-require("dotenv").config({ path: __dirname + "/.env" });
+require("dotenv").config();
 
 const express = require("express");
 const http = require("http");
