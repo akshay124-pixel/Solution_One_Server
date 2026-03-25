@@ -1,24 +1,37 @@
 name: Deploy Solution_One
+
 on:
   push:
     branches:
       - main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Deploy Via SSH
-        uses: appleboy/ssh-action@master
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
           username: root
-          key: ${{ secrets.KEY }}
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          port: 22
           script: |
             cd /www/wwwroot/Solution_One_Server
-            git pull origin main
-            docker compose down
+
+            echo "📥 Pull latest code"
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "🐳 Stop old container"
+            docker compose down || true
+
+            echo "🚀 Start new container"
             docker compose up -d --build
+
+            echo "📋 Logs"
+            docker compose logs --tail=20
