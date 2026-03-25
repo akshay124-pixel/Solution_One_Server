@@ -7,7 +7,7 @@
  *   /api/so/*     → all SO backend routes (unchanged logic)
  *
  * Two separate MongoDB connections are maintained to prevent
- * model name collisions between CRM and SO databases.
+ * model name collisions between CRM and SO databases
  */
 require("dotenv").config();
 
