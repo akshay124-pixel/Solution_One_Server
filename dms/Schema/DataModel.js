@@ -1,0 +1,51 @@
+const mongoose = require("mongoose");
+const { getDMSConnection } = require("../../utils/connections");
+
+const EntrySchema = new mongoose.Schema({
+  customerName:   { type: String, trim: true },
+  contactName:    { type: String, trim: true },
+  email:          { type: String, trim: true, lowercase: true },
+  mobileNumber:   { type: String, trim: true, match: [/^\d{10}$/, "Mobile number must be exactly 10 digits"] },
+  AlterNumber:    { type: String, trim: true, match: [/^\d{10}$/, "Mobile number must be exactly 10 digits"] },
+  product:        { type: String, trim: true },
+  address:        { type: String, trim: true },
+  organization:   { type: String, trim: true },
+  category:       { type: String, trim: true },
+  city:           { type: String, trim: true },
+  state:          { type: String, trim: true },
+  status:         { type: String, default: "Not Found" },
+  closetype:      { type: String, enum: ["Closed Won", "Closed Lost", ""], default: "" },
+  closeamount:    { type: Number, min: 0 },
+  remarks:        { type: String, trim: true, default: "" },
+  createdAt:      { type: Date, default: Date.now },
+  updatedAt:      { type: Date, default: Date.now },
+  createdBy:      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: [true, "Created by user is required"] },
+  history: [{
+    status:    { type: String, enum: ["Interested","Not Interested","Maybe","Closed","Not","Service","Not Found"] },
+    remarks:   { type: String, trim: true },
+    timestamp: { type: Date, default: Date.now },
+  }],
+  smartfloLeadId:  { type: String, trim: true },
+  lastCallDate:    { type: Date },
+  lastCallStatus:  { type: String, trim: true },
+  totalCallsMade:  { type: Number, default: 0, min: 0 },
+});
+
+EntrySchema.index({ createdBy: 1, createdAt: -1 });
+EntrySchema.index({ status: 1 });
+EntrySchema.index({ organization: 1 });
+EntrySchema.index({ state: 1, city: 1 });
+EntrySchema.index({ createdAt: -1 });
+EntrySchema.index({ updatedAt: -1 });
+EntrySchema.index({ customerName: "text", address: "text" });
+EntrySchema.index({ mobileNumber: 1 });
+EntrySchema.index({ smartfloLeadId: 1 }, { sparse: true });
+EntrySchema.pre("save", function (next) { this.updatedAt = Date.now(); next(); });
+
+let Entry;
+const getEntry = () => {
+  if (!Entry) Entry = getDMSConnection().model("Entry", EntrySchema);
+  return Entry;
+};
+
+module.exports = { getEntry };
