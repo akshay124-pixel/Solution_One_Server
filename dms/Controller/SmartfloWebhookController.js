@@ -124,21 +124,9 @@ exports.handleInboundCall = async (req, res) => {
       }
     }
 
-    const {
-      call_id, uuid,
-      caller_number, caller_id_number,
-      called_number, call_to_number,
-      virtual_number,
-      call_status,
-      start_time, start_stamp,
-      agent_number,
-      queue_id, queue_wait_time,
-      billing_circle, customer_no_with_prefix,
-    } = webhookData;
-    const virtualNum = virtual_number || called_number || call_to_number;
-    // Smartflo inbound sends caller_id_number; fall back to caller_number for other providers
-    const callerNum = caller_id_number || caller_number;
-    const callIdResolved = call_id || uuid;
+    const { call_id, caller_number, called_number, virtual_number, call_status, start_time, agent_number, queue_id, queue_wait_time } = webhookData;
+    const virtualNum = virtual_number || called_number;
+    const callerNum = caller_number;
 
     let lead = await Entry.findOne({ mobileNumber: callerNum });
     let isNewLead = false;
@@ -158,7 +146,7 @@ exports.handleInboundCall = async (req, res) => {
 
     if (isNewLead && assignedUser && !lead.createdBy) { lead.createdBy = assignedUser._id; await lead.save(); }
 
-    const callLog = new CallLog({ leadId: lead._id, userId: assignedUser ? assignedUser._id : null, agentNumber: agent_number || virtualNum, destinationNumber: callerNum, callerId: callerNum, virtualNumber: virtualNum, providerCallId: callIdResolved, callStatus: mapSmartfloStatus(call_status), callDirection: "inbound", queueId: queue_id, queueWaitTime: queue_wait_time ? parseInt(queue_wait_time) : 0, assignedAt: new Date(), routingReason: queue_id ? "queue" : "direct", startTime: start_time ? new Date(start_time) : (start_stamp ? new Date(start_stamp) : new Date()), source: "WEBHOOK", webhookData });
+    const callLog = new CallLog({ leadId: lead._id, userId: assignedUser ? assignedUser._id : null, agentNumber: agent_number || virtualNum, destinationNumber: callerNum, callerId: callerNum, virtualNumber: virtualNum, providerCallId: call_id, callStatus: mapSmartfloStatus(call_status), callDirection: "inbound", queueId: queue_id, queueWaitTime: queue_wait_time ? parseInt(queue_wait_time) : 0, assignedAt: new Date(), routingReason: queue_id ? "queue" : "direct", startTime: start_time ? new Date(start_time) : new Date(), source: "WEBHOOK", webhookData });
     await callLog.save();
 
     smartInvalidate('calls', callLog.userId?.toString());

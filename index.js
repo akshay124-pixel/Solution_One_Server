@@ -39,7 +39,6 @@ const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.set("trust proxy", 1); // Trust first proxy (nginx) so req.ip reflects real client IP
 app.use(cors({
   origin: allowedOrigins,
   methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
@@ -118,11 +117,10 @@ const bootstrap = async () => {
     const dmsRecordingRoute       = require("./dms/Router/SmartfloRecordingRouter");
     const dmsActiveCallsRoute     = require("./dms/Router/SmartfloActiveCallsRouter");
 
-    app.use("/api/dms",                        dmsDataRoute);
+    app.use("/api/dms/api",                    dmsDataRoute);
     app.use("/api/dms/dialer",                 dmsDialerRoute);
     app.use("/api/dms/admin/smartflo",         dmsAdminRoute);
     app.use("/api/dms/webhooks/smartflo",      dmsWebhookRoute);
-    app.use("/api/webhooks/smartflo",          dmsWebhookRoute); // alias — matches Smartflo webhook config
     app.use("/api/dms/analytics",              dmsAnalyticsRoute);
     app.use("/api/dms/calls",                  dmsCallHistoryRoute);
     app.use("/api/dms/recordings",             dmsRecordingRoute);
@@ -191,8 +189,3 @@ const bootstrap = async () => {
 };
 
 bootstrap();
-
-
-
-
-
