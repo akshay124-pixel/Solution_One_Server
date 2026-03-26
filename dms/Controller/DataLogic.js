@@ -359,7 +359,12 @@ const exportentry = async (req, res) => {
 
 const getAdmin = async (req, res) => {
   try {
-    const role = req.user.role;
+    const rawRole = req.user.role;
+    // Normalize to title-case for consistent comparison
+    // JWT stores role as lowercase ("admin", "superadmin", "globaladmin")
+    const role = rawRole
+      ? rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase()
+      : rawRole;
     const isGlobaladmin = role === "Globaladmin";
     return res.status(200).json({
       id: req.user.id,
