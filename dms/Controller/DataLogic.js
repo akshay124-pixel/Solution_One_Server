@@ -497,6 +497,7 @@ const getEntryCounts = async (req, res) => {
  */
 const sendEntryEmail = async (req, res) => {
   try {
+    const Entry = getEntry();
     const { entryId } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(entryId)) {
@@ -591,6 +592,7 @@ const sendEntryEmail = async (req, res) => {
 // Send Quotation Email
 const sendQuotationEmail = async (req, res) => {
   try {
+    const Entry = getEntry();
     const {
       entryId,
       productType,
